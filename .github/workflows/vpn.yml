@@ -66,52 +66,61 @@ jobs:
       run: |
         # ایجاد کانفیگ کلاینت
         cat > client.conf << EOF
-        [Interface]
-        PrivateKey = ${{ env.PRIVATE_KEY }}
-        Address = 10.8.0.2/24
-        DNS = 1.1.1.1, 8.8.8.8
+[Interface]
+PrivateKey = ${{ env.PRIVATE_KEY }}
+Address = 10.8.0.2/24
+DNS = 1.1.1.1, 8.8.8.8
 
-        [Peer]
-        PublicKey = ${{ env.PUBLIC_KEY }}
-        Endpoint = ${{ env.SERVER_IP }}:${{ env.SERVER_PORT }}
-        AllowedIPs = 0.0.0.0/0
-        PersistentKeepalive = 25
-        EOF
+[Peer]
+PublicKey = ${{ env.PUBLIC_KEY }}
+Endpoint = ${{ env.SERVER_IP }}:${{ env.SERVER_PORT }}
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+EOF
 
-        # ایجاد QR Code از کانفیگ
-        qrencode -t ANSIUTF8 < client.conf
-        qrencode -o qr-code.png -s 10 < client.conf
-        
-        # نمایش اطلاعات اتصال
+        # ایجاد QR Code و نمایش در log
         echo "=========================================="
         echo "🎯 WIREGUARD VPN - SCAN QR CODE"
         echo "=========================================="
         echo "🌐 Server: ${{ env.SERVER_IP }}"
         echo "🔌 Port: ${{ env.SERVER_PORT }}"
         echo ""
-        echo "📋 Config File:"
-        cat client.conf
+        echo "📲 Scan this QR code with WireGuard app:"
         echo ""
-        echo "📱 Scan the QR code above with WireGuard app"
+        qrencode -t ANSIUTF8 < client.conf
+        echo ""
+        echo "📋 Or use this config manually:"
         echo "=========================================="
+        cat client.conf
+        echo "=========================================="
+        
+        # همچنین ایجاد فایل QR برای دانلود
+        qrencode -o qr-code.png -s 10 < client.conf
 
-    - name: Upload QR Code and Config
-      uses: actions/upload-artifact@v3
+    - name: Upload QR Code and Config (v4)
+      uses: actions/upload-artifact@v4
       with:
         name: wireguard-config
         path: |
           client.conf
           qr-code.png
 
+    - name: Display Direct Download Link
+      run: |
+        echo "📥 Download config files from:"
+        echo "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        echo ""
+        echo "💡 After workflow completes, go to Artifacts section"
+
     - name: Keep alive
       run: |
         echo "🟢 WireGuard VPN is running..."
-        echo "📡 QR Code and config are ready in Artifacts"
+        echo "⭐ QR code is displayed above ↑"
         echo ""
-        echo "💡 How to use:"
-        echo "1. Download files from Artifacts tab"
-        echo "2. Scan QR code with WireGuard app"
-        echo "3. Or import client.conf manually"
+        echo "📱 How to connect:"
+        echo "1. Scan the QR code with WireGuard app"
+        echo "2. Or download config from Artifacts"
+        echo "3. Import client.conf manually"
         echo ""
         while true; do
             echo "✅ VPN Active - $(date +'%H:%M:%S')"

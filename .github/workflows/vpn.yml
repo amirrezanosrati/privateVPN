@@ -13,18 +13,16 @@ jobs:
 
     - name: Setup Optimized VPN
       run: |
-        # راه‌اندازی SoftEther با تنظیمات بهینه برای بازی
+        # راه‌اندازی SoftEther
         sudo systemctl start softether-vpnserver
-        
         sleep 5
         
         # ایجاد کاربر مخصوص بازی
         sudo vpncmd localhost:443 /SERVER /HUB:DEFAULT /CMD UserCreate gamer /GROUP: /REALNAME:Gaming\User /NOTE:For-Gaming
         sudo vpncmd localhost:443 /SERVER /HUB:DEFAULT /CMD UserPasswordSet gamer /PASSWORD:GamePass123!
         
-        # تنظیمات بهینه برای پینگ پایین
+        # تنظیمات بهینه برای پینگ پایین (بدون خطا)
         sudo vpncmd localhost:443 /SERVER /CMD ServerCipherSet ECDHE-P256
-        sudo vpncmd localhost:443 /SERVER /CMD ServerCertRegenerate
         sudo vpncmd localhost:443 /SERVER /CMD KeepDisable
         sudo vpncmd localhost:443 /SERVER /CMD VpnOverIcmpDnsEnable /ICMP:yes /DNS:yes
 
@@ -58,8 +56,15 @@ jobs:
         # دریافت بهترین تونل UDP
         UDP_TUNNEL=$(curl -s http://localhost:4040/api/tunnels | grep -o 'udp://[^"]*' | head -1)
         
-        UDP_IP=$(echo "$UDP_TUNNEL" | cut -d':' -f2 | sed 's#//##')
-        UDP_PORT=$(echo "$UDP_TUNNEL" | cut -d':' -f3)
+        if [ -n "$UDP_TUNNEL" ]; then
+            UDP_IP=$(echo "$UDP_TUNNEL" | cut -d':' -f2 | sed 's#//##')
+            UDP_PORT=$(echo "$UDP_TUNNEL" | cut -d':' -f3)
+        else
+            # Fallback به TCP اگر UDP کار نکرد
+            TCP_TUNNEL=$(curl -s http://localhost:4040/api/tunnels | grep -o 'tcp://[^"]*' | head -1)
+            UDP_IP=$(echo "$TCP_TUNNEL" | cut -d':' -f2 | sed 's#//##')
+            UDP_PORT=$(echo "$TCP_TUNNEL" | cut -d':' -f3)
+        fi
         
         echo "UDP_IP=$UDP_IP" >> $GITHUB_ENV
         echo "UDP_PORT=$UDP_PORT" >> $GITHUB_ENV
@@ -74,13 +79,12 @@ jobs:
         echo "🔌 Port: ${{ env.UDP_PORT }}"
         echo "👤 Username: gamer"
         echo "🔑 Password: GamePass123!"
-        echo "🔒 Encryption: AES-256-GCM"
+        echo "🔒 Encryption: ECDHE-P256"
         echo ""
-        echo "⚡ Recommended for:"
+        echo "⚡ Optimized for:"
         echo "• Mobile Legends"
-        echo "• PUBG Mobile"
+        echo "• PUBG Mobile" 
         echo "• Call of Duty Mobile"
-        echo "• Free Fire"
         echo ""
         echo "📱 Connection Type: L2TP/IPsec PSK"
         echo "=========================================="
@@ -98,13 +102,13 @@ jobs:
             
             # تست پینگ به سرورهای مختلف
             echo "Mobile Legends:"
-            ping -c 2 mlbb.com | tail -1 | awk '{print $4}' | cut -d'/' -f2 || echo "N/A"
+            ping -c 2 mlbb.com | tail -1 | awk -F'/' '{print $5 " ms"}' || echo "N/A"
             
             echo "Google DNS:"
-            ping -c 2 8.8.8.8 | tail -1 | awk '{print $4}' | cut -d'/' -f2 || echo "N/A"
+            ping -c 2 8.8.8.8 | tail -1 | awk -F'/' '{print $5 " ms"}' || echo "N/A"
             
             echo "Cloudflare:"
-            ping -c 2 1.1.1.1 | tail -1 | awk '{print $4}' | cut -d'/' -f2 || echo "N/A"
+            ping -c 2 1.1.1.1 | tail -1 | awk -F'/' '{print $5 " ms"}' || echo "N/A"
             
             sleep 30
         done

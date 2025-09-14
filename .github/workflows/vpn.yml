@@ -1,4 +1,4 @@
-name: WireGuard Lowest Ping
+name: WireGuard VPN with QR Code
 on:
   workflow_dispatch:
 
@@ -6,10 +6,10 @@ jobs:
   wireguard-vpn:
     runs-on: ubuntu-latest
     steps:
-    - name: Install WireGuard
+    - name: Install WireGuard and QR tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y wireguard resolvconf
+        sudo apt-get install -y wireguard resolvconf qrencode
 
     - name: Generate WireGuard Keys
       run: |
@@ -18,11 +18,11 @@ jobs:
         echo "PRIVATE_KEY=$(cat privatekey)" >> $GITHUB_ENV
         echo "PUBLIC_KEY=$(cat publickey)" >> $GITHUB_ENV
 
-    - name: Create Config
+    - name: Create WireGuard Config
       run: |
         sudo tee /etc/wireguard/wg0.conf > /dev/null << EOF
         [Interface]
-        Address = 10.0.0.1/24
+        Address = 10.8.0.1/24
         ListenPort = 51820
         PrivateKey = ${{ env.PRIVATE_KEY }}
         PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
@@ -30,7 +30,7 @@ jobs:
 
         [Peer]
         PublicKey = ${{ env.PUBLIC_KEY }}
-        AllowedIPs = 10.0.0.2/32
+        AllowedIPs = 10.8.0.2/32
         EOF
 
     - name: Start WireGuard
@@ -38,7 +38,7 @@ jobs:
         sudo wg-quick up wg0
         sleep 3
 
-    - name: Setup Ngrok UDP
+    - name: Setup Ngrok UDP Tunnel
       run: |
         wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
         tar -xzf ngrok-v3-stable-linux-amd64.tgz
@@ -51,19 +51,25 @@ jobs:
     - name: Get Connection Info
       run: |
         UDP_URL=$(curl -s http://localhost:4040/api/tunnels | grep -o 'udp://[^"]*' | head -1)
-        SERVER_IP=$(echo "$UDP_URL" | cut -d':' -f2 | sed 's#//##')
-        SERVER_PORT=$(echo "$UDP_URL" | cut -d':' -f3)
+        if [ -n "$UDP_URL" ]; then
+            SERVER_IP=$(echo "$UDP_URL" | cut -d':' -f2 | sed 's#//##')
+            SERVER_PORT=$(echo "$UDP_URL" | cut -d':' -f3)
+        else
+            SERVER_IP="0.udp.ngrok.io"
+            SERVER_PORT="51820"
+        fi
         
         echo "SERVER_IP=$SERVER_IP" >> $GITHUB_ENV
         echo "SERVER_PORT=$SERVER_PORT" >> $GITHUB_ENV
 
-    - name: Display Config
+    - name: Generate Client Config and QR Code
       run: |
+        # ایجاد کانفیگ کلاینت
         cat > client.conf << EOF
         [Interface]
         PrivateKey = ${{ env.PRIVATE_KEY }}
-        Address = 10.0.0.2/24
-        DNS = 1.1.1.1
+        Address = 10.8.0.2/24
+        DNS = 1.1.1.1, 8.8.8.8
 
         [Peer]
         PublicKey = ${{ env.PUBLIC_KEY }}
@@ -71,21 +77,43 @@ jobs:
         AllowedIPs = 0.0.0.0/0
         PersistentKeepalive = 25
         EOF
+
+        # ایجاد QR Code از کانفیگ
+        qrencode -t ANSIUTF8 < client.conf
+        qrencode -o qr-code.png -s 10 < client.conf
         
+        # نمایش اطلاعات اتصال
         echo "=========================================="
-        echo "🎯 WIREGUARD LOWEST PING CONFIG"
+        echo "🎯 WIREGUARD VPN - SCAN QR CODE"
         echo "=========================================="
         echo "🌐 Server: ${{ env.SERVER_IP }}"
         echo "🔌 Port: ${{ env.SERVER_PORT }}"
-        echo "🔑 Public Key: ${{ env.PUBLIC_KEY }}"
         echo ""
-        echo "📱 Import in WireGuard app"
+        echo "📋 Config File:"
+        cat client.conf
+        echo ""
+        echo "📱 Scan the QR code above with WireGuard app"
         echo "=========================================="
+
+    - name: Upload QR Code and Config
+      uses: actions/upload-artifact@v3
+      with:
+        name: wireguard-config
+        path: |
+          client.conf
+          qr-code.png
 
     - name: Keep alive
       run: |
-        echo "🟢 WireGuard running - Lowest ping guaranteed!"
+        echo "🟢 WireGuard VPN is running..."
+        echo "📡 QR Code and config are ready in Artifacts"
+        echo ""
+        echo "💡 How to use:"
+        echo "1. Download files from Artifacts tab"
+        echo "2. Scan QR code with WireGuard app"
+        echo "3. Or import client.conf manually"
+        echo ""
         while true; do
-            echo "✅ Active - Ping: <50ms typical"
+            echo "✅ VPN Active - $(date +'%H:%M:%S')"
             sleep 60
         done
